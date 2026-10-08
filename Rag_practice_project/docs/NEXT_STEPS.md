@@ -20,163 +20,245 @@ Completed:
 * BM25 / lexical retrieval
 * Hybrid retrieval
 * Reciprocal Rank Fusion (RRF)
+* Cross-Encoder reranking
 
 ⸻
 
 Current Stage
 
-→ Reranking
+→ Post-Retrieval / RAG Generation
 
-We have now implemented a hybrid retrieval pipeline using semantic search + BM25 + RRF.
-
-Current architecture:
+The retrieval pipeline is now working through:
 
 User Query
     ↓
- ┌──┴──┐
- ↓     ↓
-Semantic    BM25
-Top 20     Top 20
- ↓           ↓
- └─────┬─────┘
-       ↓
-      RRF
-       ↓
-Candidates
+Semantic Search
+    ↓
+BM25
+    ↓
+RRF
+    ↓
+Candidate Set
+    ↓
+Cross-Encoder Reranker
+    ↓
+Final Top-K
 
-The next step is to improve the ordering of these candidates using a reranker.
+We have successfully implemented and verified the retrieval + reranking stage.
+
+The next step is to understand what happens after the final relevant chunks have been retrieved.
 
 ⸻
 
 Immediate Next Tasks
 
-1. Understand Reranking
+1. Context Assembly
 
-Learn at an engineering level:
-
-* what reranking means
-* why retrieval and reranking are separate stages
-* why initial retrieval prioritizes recall
-* why reranking prioritizes relevance/precision
-* where reranking fits into our RAG pipeline
-
-Target architecture:
-
-Query
-  ↓
-Candidate Retrieval
-  ↓
-RRF
-  ↓
-Candidate Set
-  ↓
-Reranker
-  ↓
-Final Top-K
-
-⸻
-
-2. Understand Bi-Encoder vs Cross-Encoder
-
-Understand only the concepts needed for implementation.
-
-Bi-encoder:
-
-Query ──→ Embedding
-             │
-             ├── similarity ──→ Chunk
-             │
-Chunk ──→ Embedding
-
-Cross-encoder:
-
-Query + Chunk
-      ↓
-Cross-Encoder
-      ↓
-Relevance Score
-
-Understand why cross-encoders are generally more precise for reranking but more computationally expensive.
-
-⸻
-
-3. Choose a Practical Cross-Encoder
-
-Select a practical pretrained cross-encoder suitable for our local learning project.
-
-Understand briefly:
-
-* why we choose it
-* what input it expects
-* what it returns
-* whether it is practical on our hardware
-* how it fits into our current Python environment
-
-Avoid researching or training our own reranker.
-
-⸻
-
-4. Implement Reranking
-
-Take the candidates produced by RRF:
-
-RRF candidates
-      ↓
-Query + candidate text
-      ↓
-Cross-Encoder
-      ↓
-Relevance scores
-      ↓
-Sort by score
+Learn how the final reranked chunks are prepared as context for an LLM.
 
 Understand:
 
-* how the query is paired with each chunk
-* how the model scores relevance
-* how candidates are sorted
-* why only the final top-K chunks are passed forward
+* What context assembly means
+* How final chunks are selected
+* How chunk ordering affects the context
+* How metadata can be preserved
+* How to avoid unnecessary context
+* Why sending every retrieved chunk to the LLM is undesirable
+* How the final context should be structured
+
+Target:
+
+Reranked Chunks
+      ↓
+Top-K Selection
+      ↓
+Context Assembly
+      ↓
+LLM Context
 
 ⸻
 
-5. Inspect Reranking Results
+2. RAG Answer Generation
 
-Use the same real IoT document and queries we’ve already been using.
+Learn how the retrieved context is provided to an LLM to generate a grounded answer.
 
-Compare:
+Understand:
 
-Semantic ranking
-BM25 ranking
-RRF ranking
-Reranked ranking
+* How retrieved chunks are inserted into a prompt
+* How the LLM is instructed to answer from the provided context
+* How context and user query are separated
+* Why the LLM should not rely on unsupported information
+* How retrieved evidence influences generation
 
-Understand which chunks moved and why.
+Target:
+
+User Query
+     +
+Retrieved Context
+     ↓
+    LLM
+     ↓
+Grounded Answer
 
 ⸻
 
-After Reranking
+3. Citations and Grounding
+
+Learn how retrieved chunk metadata can be used to produce traceable answers.
+
+Our chunks already contain information such as:
+
+chunk_id
+page_number
+section_title
+content
+
+Use this metadata to support citations such as:
+
+Document
+Page
+Section
+
+Understand:
+
+* Why citations matter
+* How provenance is preserved through retrieval
+* How the answer can reference supporting chunks
+* Difference between retrieval evidence and generated text
+
+⸻
+
+4. Query Rewriting
+
+After basic RAG generation is working, learn how the original user query can be transformed into a better retrieval query.
+
+Understand:
+
+* Why query rewriting is useful
+* When the original query may be poorly suited for retrieval
+* How an LLM can improve retrieval queries
+* When query rewriting should and should not be used
+
+Target:
+
+User Query
+    ↓
+Query Rewriting
+    ↓
+Improved Retrieval Query
+    ↓
+Retrieval Pipeline
+
+⸻
+
+5. Multi-Query Retrieval
+
+Learn how one user question can be transformed into multiple retrieval queries.
+
+Understand:
+
+* Why multiple query formulations can improve recall
+* How multiple retrieval results are combined
+* How this differs from simple query rewriting
+* When multi-query retrieval is useful
+
+Target:
+
+User Query
+     ↓
+Query 1 ──→ Retrieval
+Query 2 ──→ Retrieval
+Query 3 ──→ Retrieval
+     ↓
+Combine Results
+     ↓
+Reranking
+
+⸻
+
+6. Multi-Hop Retrieval
+
+Learn how some questions require retrieving information in multiple steps.
+
+Understand:
+
+* What multi-hop retrieval means
+* Why one retrieval operation may not be sufficient
+* How information from one retrieved result can lead to another retrieval step
+* Where multi-hop retrieval fits into advanced RAG systems
+
+⸻
+
+7. Retrieval Evaluation
+
+Learn how to evaluate whether our retrieval system is actually retrieving useful chunks.
+
+Understand practical retrieval metrics such as:
+
+* Recall
+* Precision
+* Hit Rate
+* MRR
+* Recall@K
+
+Focus on how these metrics help diagnose retrieval quality rather than going deeply into evaluation theory.
+
+⸻
+
+8. Answer Evaluation
+
+After answer generation is implemented, learn how to evaluate:
+
+* Groundedness
+* Relevance
+* Faithfulness
+* Answer correctness
+* Citation quality
+
+Understand the difference between:
+
+Good Retrieval
+
+and:
+
+Good Final Answer
+
+A RAG system can retrieve the correct chunk but still generate a poor answer.
+
+⸻
+
+After Basic RAG
 
 Continue toward:
 
-1. Query rewriting
-2. Multi-query retrieval
-3. Multi-hop retrieval
-4. Context assembly
-5. RAG answer generation
-6. Citations and grounding
-7. Retrieval evaluation
-8. Answer evaluation
-9. Production RAG architecture
-10. Agentic RAG
-11. Agentic AI workflows
+Context Assembly
+      ↓
+RAG Answer Generation
+      ↓
+Citations / Grounding
+      ↓
+Retrieval Evaluation
+      ↓
+Answer Evaluation
+      ↓
+Production RAG Patterns
+      ↓
+Advanced RAG
+      ↓
+Agentic RAG
+      ↓
+Agentic AI Workflows
 
 ⸻
 
-Target Retrieval Architecture
+Target RAG Architecture
 
-After reranking, our retrieval pipeline should look approximately like:
+After the next stages are implemented, the learning project should conceptually look like:
 
                          User Query
+                             │
+                             ▼
+                     Query Processing
                              │
                 ┌────────────┴────────────┐
                 ▼                         ▼
@@ -191,14 +273,23 @@ After reranking, our retrieval pipeline should look approximately like:
                        Candidate Set
                              │
                              ▼
-                       Cross-Encoder
-                         Reranker
+                     Cross-Encoder
+                       Reranker
                              │
                              ▼
                          Final Top-K
                              │
                              ▼
-                      Context Assembly
+                    Context Assembly
+                             │
+                             ▼
+                            LLM
+                             │
+                             ▼
+                   Grounded Answer
+                             │
+                             ▼
+                         Citations
 
 ⸻
 
@@ -206,7 +297,15 @@ Learning Rule
 
 For every stage:
 
-Understand enough → implement → inspect → understand the implementation → move forward.
+Understand enough
+        ↓
+Implement
+        ↓
+Inspect
+        ↓
+Understand the implementation
+        ↓
+Move forward
 
 Focus on:
 
@@ -214,7 +313,7 @@ How do I use this correctly in a production RAG system, and why does it work?
 
 Do not spend unnecessary time on research-level theory.
 
-The goal is to become an AI/RAG engineer, not an embedding, retrieval, or model-training researcher.
+The goal is to become an AI/RAG engineer, not an embedding, retrieval, reranking, or model-training researcher.
 
 ⸻
 
@@ -224,15 +323,36 @@ Approximately 60 structured chunks are stored in PostgreSQL.
 
 The project currently has:
 
-* embedding generation
+* PDF extraction
+* Text cleaning
+* Section detection
+* Chunking
+* Structured chunk objects
+* PostgreSQL storage
+* Embedding generation
 * pgvector storage
-* semantic retrieval
+* Semantic retrieval
 * BM25 retrieval
-* hybrid retrieval
+* Hybrid retrieval
 * RRF fusion
-* top-20 candidate retrieval
-* final top-5 selection
+* Top-20 candidate retrieval
+* Cross-Encoder reranking
+* Final ranked chunks
 
-The immediate next practical task is:
+The verified retrieval pipeline is:
 
-Implement and understand cross-encoder reranking on top of the RRF candidate set.
+Semantic Top 20
+       +
+BM25 Top 20
+       ↓
+      RRF
+       ↓
+Candidate Set
+       ↓
+Cross-Encoder
+       ↓
+Final Top-K
+
+The next practical learning task is:
+
+Learn how to assemble the final reranked chunks into LLM context and implement basic RAG answer generation.

@@ -4,11 +4,13 @@ Purpose
 
 This is a small practical RAG learning project.
 
-The goal is to learn Retrieval-Augmented Generation from fundamentals to advanced, career-relevant RAG techniques by actually implementing each important stage.
+The goal is to learn Retrieval-Augmented Generation from fundamentals through advanced, career-relevant RAG techniques by actually implementing each important stage.
 
 This is currently a learning/sandbox project.
 
-The larger Enterprise Document Intelligence System is a separate future project. The learning project should teach and validate the individual RAG components before those concepts are transferred into the larger system.
+The larger Enterprise Document Intelligence System is a separate future project. This learning project should teach and validate the individual RAG components before those concepts are transferred into the larger system.
+
+The practice project should remain focused on understanding and implementing RAG concepts rather than becoming the final enterprise application.
 
 ⸻
 
@@ -42,11 +44,19 @@ Hybrid retrieval
  ↓
 RRF
  ↓
-Reranking        ← CURRENT NEXT STAGE
+Cross-Encoder Reranking
  ↓
-RAG generation
+Final Ranked Chunks
+
+The next stage is to move from retrieval/reranking toward:
+
+Final Ranked Chunks
  ↓
-Citations / grounded answers
+Context Assembly
+ ↓
+RAG Generation
+ ↓
+Citations / Grounding
 
 ⸻
 
@@ -56,6 +66,7 @@ Current Technologies
 * PyMuPDF
 * Sentence Transformers
 * all-MiniLM-L6-v2
+* cross-encoder/ms-marco-MiniLM-L-6-v2
 * PostgreSQL
 * pgAdmin 4
 * SQLAlchemy
@@ -67,63 +78,118 @@ Current Technologies
 
 Current Project Structure
 
-The important current files include:
+Important current files include:
 
 Ragg/
 │
 ├── ingestion.py
 ├── db.py
+├── embedding.py
 ├── semantic_search.py
 ├── bm25.py
 ├── rrf.py
+├── reranker.py
 │
+├── sample.pdf
 ├── documents/
 ├── .venv/
-└── ...
+└── docs/
 
-File responsibilities
+File Responsibilities
 
 ingestion.py
 
-Responsible for processing the source PDF and preparing structured chunks.
+Responsible for:
+
+* Processing the source PDF
+* Extracting text
+* Cleaning extracted text
+* Detecting useful structure
+* Preparing structured chunks
+
+⸻
 
 db.py
 
 Responsible for PostgreSQL operations such as:
 
-* saving documents
-* saving chunks
-* retrieving chunks
-* saving embeddings
-* semantic vector search
+* Saving documents
+* Saving chunks
+* Retrieving chunks
+* Saving embeddings
+* Performing semantic vector search
+
+⸻
+
+embedding.py
+
+Responsible for embedding-related functionality.
+
+The project uses:
+
+all-MiniLM-L6-v2
+
+for generating text embeddings.
+
+⸻
 
 semantic_search.py
 
 Responsible for:
 
-* loading the embedding model
-* converting a query into an embedding
-* performing semantic retrieval through db.py
-* returning standardized semantic search results
+* Loading the embedding model
+* Converting a query into an embedding
+* Performing semantic retrieval through db.py
+* Returning standardized semantic search results
+
+⸻
 
 bm25.py
 
 Responsible for:
 
-* preparing the BM25 corpus
-* tokenization
+* Preparing the BM25 corpus
+* Tokenization
 * BM25 scoring
-* returning ranked lexical search results
+* Returning ranked lexical search results
+
+⸻
 
 rrf.py
 
 Responsible for:
 
-* receiving one user query
-* running semantic retrieval
-* running BM25 retrieval
-* combining their ranked results using Reciprocal Rank Fusion
-* producing the final hybrid ranking
+* Running semantic retrieval
+* Running BM25 retrieval
+* Combining their ranked results
+* Applying Reciprocal Rank Fusion
+* Producing the hybrid candidate ranking
+
+RRF uses:
+
+RRF(d) = Σ 1 / (k + rank)
+
+with:
+
+k = 60
+
+⸻
+
+reranker.py
+
+Responsible for:
+
+* Loading the Cross-Encoder
+* Receiving RRF candidates
+* Creating query/chunk pairs
+* Generating relevance scores
+* Preserving candidate metadata
+* Adding rerank_score
+* Sorting candidates by relevance
+
+Current model:
+
+cross-encoder/ms-marco-MiniLM-L-6-v2
 
 ⸻
 
@@ -133,12 +199,12 @@ The current practice document has been processed into approximately 60 structure
 
 Each chunk contains information such as:
 
-* document ID
-* chunk index
-* page number
-* section title
-* content/text
-* provenance information
+* Document ID
+* Chunk index
+* Page number
+* Section title
+* Content/text
+* Provenance information
 
 The practice document is an IoT-related document containing sections such as:
 
@@ -146,7 +212,7 @@ The practice document is an IoT-related document containing sections such as:
 * Application Layer Protocols
 * Transport Layer
 * General
-* other IoT-related sections
+* Other IoT-related sections
 
 ⸻
 
@@ -158,14 +224,14 @@ rag_tut
 
 PostgreSQL is accessed through SQLAlchemy.
 
-The document_chunks table currently stores:
+The document chunks table currently stores:
 
-* document ID
-* chunk index
-* content
-* page number
-* section title
-* embedding
+* Document ID
+* Chunk index
+* Content
+* Page number
+* Section title
+* Embedding
 
 pgvector is used for vector storage and vector similarity search.
 
@@ -173,7 +239,7 @@ pgvector is used for vector storage and vector similarity search.
 
 Current Retrieval Architecture
 
-The current hybrid retrieval architecture is:
+The current retrieval architecture is:
 
                          User Query
                              │
@@ -187,11 +253,20 @@ The current hybrid retrieval architecture is:
                             RRF
                              │
                              ▼
-                         Final Top 5
+                       Candidate Set
+                             │
+                             ▼
+                     Cross-Encoder
+                       Reranker
+                             │
+                             ▼
+                         Final Top-K
 
 Semantic search and BM25 use the same query but retrieve independently.
 
-RRF combines their ranks instead of directly combining their raw scores.
+RRF combines their rankings instead of directly combining their raw scores.
+
+The Cross-Encoder then evaluates the relationship between the query and each candidate chunk.
 
 ⸻
 
@@ -218,27 +293,83 @@ Current candidate generation:
 Semantic → Top 20
 BM25     → Top 20
 
-RRF then produces the final ranking.
-
-The current final output selects the top 5 results.
+RRF combines these results into a hybrid candidate ranking.
 
 ⸻
 
-Current Verified Example
+Cross-Encoder Reranking
+
+The Cross-Encoder operates after RRF.
+
+Its input is:
+
+Query + Candidate Chunk
+
+The model directly evaluates the relationship between the query and candidate chunk.
+
+Conceptually:
+
+Query ───────────┐
+                 ├──→ Cross-Encoder → Relevance Score
+Chunk ───────────┘
+
+This differs from the embedding model used for semantic search.
+
+Semantic Retrieval
+
+Query
+ ↓
+Embedding
+ ↓
+Vector
+ ↓
+Similarity Search
+
+Cross-Encoder Reranking
+
+Query + Chunk
+      ↓
+Cross-Encoder
+      ↓
+Relevance Score
+
+The Cross-Encoder is more computationally expensive, so it is applied to a relatively small candidate set produced by the initial retrieval stages.
+
+⸻
+
+Verified Reranking Example
 
 For the query:
 
 What does the application layer do?
 
-the hybrid retrieval system produced:
+RRF produced:
 
-Rank 1 → Chunk 48 — Application
-Rank 2 → Chunk 19 — Application Layer Protocols
-Rank 3 → Chunk 18 — General
-Rank 4 → Chunk 15 — General
-Rank 5 → Chunk 24 — Transport Layer
+1. Chunk 48 — Application
+2. Chunk 19 — Application Layer Protocols
+3. Chunk 18 — General
+4. Chunk 15 — General
+5. Chunk 24 — Transport Layer
 
-This verified that semantic retrieval and BM25 can be combined successfully using RRF.
+After Cross-Encoder reranking:
+
+1. Chunk 19 — Application Layer Protocols
+2. Chunk 48 — Application
+3. Chunk 20 — HTTP
+4. Chunk 45 — Services
+5. Chunk 27 — Network Layer
+
+Example reranker scores:
+
+Chunk 19 → 8.4276
+Chunk 48 → 8.2948
+Chunk 20 → 3.5832
+Chunk 45 → 3.3779
+Chunk 27 → 1.9551
+
+This verified that reranking can change the ordering produced by RRF.
+
+It also demonstrated that reranking scores are a separate relevance signal and should not be treated as probabilities.
 
 ⸻
 
@@ -248,7 +379,15 @@ The user is learning to become an AI/RAG engineer, not an embedding or RAG resea
 
 The teaching approach should therefore be:
 
-Understand enough → implement → inspect → understand the implementation → move forward.
+Understand enough
+        ↓
+Implement
+        ↓
+Inspect
+        ↓
+Understand the implementation
+        ↓
+Move forward
 
 For every RAG concept:
 
@@ -264,22 +403,22 @@ Avoid unnecessary research-level theory.
 
 Do not spend time on:
 
-* advanced neural-network mathematics
-* transformer internals
-* embedding training objectives
-* research-level retrieval theory
-* lengthy toy experiments
-* unnecessary benchmark experiments
+* Advanced neural-network mathematics
+* Transformer internals
+* Embedding training objectives
+* Research-level retrieval theory
+* Lengthy toy experiments
+* Unnecessary benchmark experiments
 
 Only introduce deeper theory when it becomes necessary to understand or correctly implement the system.
 
 The primary question should be:
 
-“How do I use this correctly in a production RAG system, and why does it work?”
+How do I use this correctly in a production RAG system, and why does it work?
 
 Not:
 
-“How would I mathematically design and train this model?”
+How would I mathematically design and train this model?
 
 This learning depth should remain consistent throughout RAG and Agentic AI.
 
@@ -287,7 +426,7 @@ This learning depth should remain consistent throughout RAG and Agentic AI.
 
 Current RAG Learning Stage
 
-The project has completed the basic and intermediate retrieval foundation.
+The project has completed the retrieval and reranking foundation.
 
 Completed:
 
@@ -312,14 +451,14 @@ BM25
 Hybrid retrieval
      ↓
 RRF
+     ↓
+Cross-Encoder Reranking
 
-The current stage is:
+The current next stage is:
 
-Reranking
+Context Assembly
 
-The immediate next component is a cross-encoder reranker.
-
-Target:
+The target is:
 
 Semantic Top 20
         +
@@ -332,6 +471,10 @@ Candidate Set
 Cross-Encoder Reranker
         ↓
 Final Top-K
+        ↓
+Context Assembly
+        ↓
+LLM
 
 ⸻
 
@@ -343,7 +486,17 @@ The small project should remain a sandbox for learning the RAG pipeline.
 
 Do not turn this project into the full Enterprise Document Intelligence System yet.
 
-The goal is to understand and implement each important RAG component properly before moving to more advanced retrieval, RAG generation, evaluation, and Agentic AI.
+The larger Enterprise Document Intelligence System is a separate future project.
+
+The goal of this learning project is to understand and implement each important RAG component properly before moving to:
+
+* Advanced retrieval
+* RAG generation
+* Grounding
+* Evaluation
+* Production RAG patterns
+* Agentic RAG
+* Agentic AI
 
 The project should remain simple enough to understand while still using engineering patterns that transfer to production systems.
 
@@ -351,30 +504,43 @@ The project should remain simple enough to understand while still using engineer
 
 Future Direction
 
-After reranking, the learning path is:
+After the current retrieval and reranking stage, the learning path is:
 
-Reranking
-   ↓
-Query Rewriting
-   ↓
-Multi-Query / Advanced Retrieval
-   ↓
-Multi-Hop Retrieval
-   ↓
+Cross-Encoder Reranking
+        ↓
 Context Assembly
-   ↓
+        ↓
 RAG Answer Generation
-   ↓
+        ↓
 Citations / Grounding
-   ↓
-Evaluation
-   ↓
+        ↓
+Retrieval Evaluation
+        ↓
+Answer Evaluation
+        ↓
+Query Rewriting
+        ↓
+Multi-Query Retrieval
+        ↓
+Multi-Hop Retrieval
+        ↓
 Production RAG Patterns
-   ↓
+        ↓
 Agentic RAG
-   ↓
+        ↓
 Agentic AI
 
 The final goal is not merely to build a basic “PDF chatbot”.
 
-The goal is to understand how modern RAG systems retrieve, rank, ground, and generate answers reliably, and then use those principles when building larger AI systems.
+The goal is to understand how modern RAG systems:
+
+* Retrieve information
+* Combine retrieval signals
+* Rank relevant evidence
+* Assemble useful context
+* Generate grounded answers
+* Preserve provenance
+* Evaluate retrieval and answers
+* Scale toward more advanced AI workflows
+
+The knowledge gained here will later be applied when building larger AI systems, including the separate Enterprise Document Intelligence System.
